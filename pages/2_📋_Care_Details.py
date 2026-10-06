@@ -12,12 +12,12 @@ from scoring.care_access_score import calculate_care_access_score
 from utils.calendar import generate_ics_calendar
 from utils.export import generate_shareable_referral_text
 from utils.geo import get_directions_url, geocode_location, haversine_distance
-from utils.styles import inject_custom_css, render_header
+from utils.styles import inject_custom_css, render_header, LOGO_PATH
 
 
 st.set_page_config(
     page_title="Care Details | CareAtZero",
-    page_icon="📋",
+    page_icon=LOGO_PATH,
     layout="wide"
 )
 
@@ -96,7 +96,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # Main Action Buttons Toolbar
-act1, act2, act3, act4 = st.columns(4)
+act1, act2, act3 = st.columns(3)
 
 with act1:
     phone_num = record.get("phone", "")
@@ -121,13 +121,6 @@ with act3:
         mime="text/calendar",
         use_container_width=True
     )
-
-with act4:
-    is_saved = is_care_saved(record.get("id"), record.get("record_type"))
-    save_label = "★ Saved to Bookmarks" if is_saved else "☆ Save this Option"
-    if st.button(save_label, key="detail_save_btn", use_container_width=True):
-        toggle_saved_care(record.get("id"), record.get("record_type"))
-        st.rerun()
 
 st.markdown("---")
 

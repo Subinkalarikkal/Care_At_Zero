@@ -12,12 +12,12 @@ if PROJECT_ROOT not in sys.path:
 from database.db import get_all_sites, get_all_events, is_care_saved, toggle_saved_care
 from scoring.care_access_score import calculate_care_access_score
 from utils.geo import geocode_location, haversine_distance, get_directions_url
-from utils.styles import inject_custom_css, render_header
+from utils.styles import inject_custom_css, render_header, LOGO_PATH
 
 
 st.set_page_config(
     page_title="Find Free & Low-Cost Care | CareAtZero",
-    page_icon="🔍",
+    page_icon=LOGO_PATH,
     layout="wide"
 )
 
@@ -246,7 +246,7 @@ else:
         st.markdown(card_html, unsafe_allow_html=True)
 
         # Action Buttons Row
-        btn_c1, btn_c2, btn_c3, btn_c4 = st.columns([1.5, 1, 1, 1.2])
+        btn_c1, btn_c2, btn_c3 = st.columns([1.5, 1, 1])
 
         with btn_c1:
             if st.button(f"📋 View Full Details", key=f"btn_det_{rec.get('id')}_{idx}", type="primary", use_container_width=True):
@@ -266,15 +266,6 @@ else:
             addr = f"{rec.get('address')}, {rec.get('city')}, NC"
             maps_url = get_directions_url(addr, rec.get("latitude"), rec.get("longitude"))
             st.link_button(f"🗺️ Directions", maps_url, use_container_width=True)
-
-        with btn_c4:
-            rec_id = rec.get("id")
-            rec_type = rec.get("record_type")
-            is_saved = is_care_saved(rec_id, rec_type)
-            btn_label = "★ Saved" if is_saved else "☆ Save Option"
-            if st.button(btn_label, key=f"btn_save_{rec_id}_{idx}", use_container_width=True):
-                toggle_saved_care(rec_id, rec_type)
-                st.rerun()
 
         st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 

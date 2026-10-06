@@ -7,16 +7,16 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from database.db import get_all_sites, get_all_events, init_db, DB_PATH
+from database.db import get_all_events, init_db, DB_PATH
 from data.seed_data import seed_database
-from utils.styles import inject_custom_css, render_header
+from utils.styles import inject_custom_css, render_header, LOGO_PATH
 from utils.geo import NC_ZIP_COORDINATES
 
 
 # Set page configuration
 st.set_page_config(
     page_title="CareAtZero | Free & Low-Cost Healthcare Access",
-    page_icon="🩺",
+    page_icon=LOGO_PATH,
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -34,24 +34,32 @@ render_header("home")
 
 # Main Quick Service Launcher & Search Bar
 st.markdown("### 🎯 What type of care do you need?")
-row1_col1, row1_col2 = st.columns(2)
-with row1_col1:
-    if st.button("🩺 **Medical Care**\n\n*Primary care & exams*", use_container_width=True):
-        st.session_state["selected_service"] = "Medical"
-        st.switch_page("pages/1_🔍_Find_Free_Care.py")
-with row1_col2:
-    if st.button("🦷 **Dental Care**\n\n*Extractions & cleanings*", use_container_width=True):
-        st.session_state["selected_service"] = "Dental"
-        st.switch_page("pages/1_🔍_Find_Free_Care.py")
 
-row2_col1, row2_col2 = st.columns(2)
-with row2_col1:
-    if st.button("👁️ **Vision Care**\n\n*Free exams & glasses*", use_container_width=True):
-        st.session_state["selected_service"] = "Vision"
-        st.switch_page("pages/1_🔍_Find_Free_Care.py")
-with row2_col2:
-    if st.button("🧠 **Behavioral Health**\n\n*Counseling & crisis care*", use_container_width=True):
-        st.session_state["selected_service"] = "Behavioral Health"
+care_options = [
+    "🩺 Medical Care (Primary care & exams)",
+    "🦷 Dental Care (Extractions & cleanings)",
+    "👁️ Vision Care (Free exams & glasses)",
+    "🧠 Behavioral Health (Counseling & crisis care)"
+]
+care_mapping = {
+    "🩺 Medical Care (Primary care & exams)": "Medical",
+    "🦷 Dental Care (Extractions & cleanings)": "Dental",
+    "👁️ Vision Care (Free exams & glasses)": "Vision",
+    "🧠 Behavioral Health (Counseling & crisis care)": "Behavioral Health"
+}
+
+care_col1, care_col2 = st.columns([3, 1])
+with care_col1:
+    selected_care_choice = st.selectbox(
+        "Select care service needed",
+        care_options,
+        index=0,
+        label_visibility="collapsed",
+        key="home_care_type_select"
+    )
+with care_col2:
+    if st.button("Explore Care ➔", key="btn_go_service", use_container_width=True):
+        st.session_state["selected_service"] = care_mapping[selected_care_choice]
         st.switch_page("pages/1_🔍_Find_Free_Care.py")
 
 st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
@@ -65,53 +73,15 @@ with search_col2:
     quick_timing = st.selectbox("⏱️ **When do you need care?**", ["This Week", "Today", "Flexible (Upcoming)"], index=0)
 with search_col3:
     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-    if st.button("🔍 Find Free Care Now", type="primary", use_container_width=True):
+    if st.button("🔍 Find Free Care Now", type="primary", use_container_width=True, key="btn_quick_find_care"):
+        st.session_state["selected_service"] = care_mapping[selected_care_choice]
         st.session_state["search_loc"] = quick_loc
         st.session_state["search_timing"] = quick_timing
         st.switch_page("pages/1_🔍_Find_Free_Care.py")
 
 st.markdown("---")
 
-# Impact & Coverage Metrics
-sites = get_all_sites()
 events = get_all_events(include_expired=False, current_date_str="2026-09-16")
-free_sites_count = sum(1 for s in sites if s.get("cost_class") == "Free")
-sliding_sites_count = sum(1 for s in sites if s.get("cost_class") == "Sliding Scale")
-
-m1, m2, m3, m4 = st.columns(4)
-with m1:
-    st.markdown(f"""
-    <div class="stat-card">
-        <div class="stat-number">{len(sites)}</div>
-        <div class="stat-label">Verified Safety Net Clinics</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with m2:
-    st.markdown(f"""
-    <div class="stat-card">
-        <div class="stat-number">{free_sites_count}</div>
-        <div class="stat-label">100% Free Clinics ($0 Fee)</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with m3:
-    st.markdown(f"""
-    <div class="stat-card">
-        <div class="stat-number">{len(events)}</div>
-        <div class="stat-label">Upcoming Mobile / Pop-Up Events</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with m4:
-    st.markdown(f"""
-    <div class="stat-card">
-        <div class="stat-number">100%</div>
-        <div class="stat-label">Source Transparent & Free</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
 
 # Highlight: Upcoming Mobile Care & RAM Free Clinics
 st.subheader("🚐 Upcoming Mobile & Pop-Up Free Care Clinics")
@@ -136,44 +106,9 @@ for idx, evt in enumerate(events[:3]):
             st.session_state["selected_care_type"] = "event"
             st.switch_page("pages/2_📋_Care_Details.py")
 
-st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
-
-# How CareAtZero Works (UX Principles)
-st.subheader("💡 Why CareAtZero is Different")
-p1, p2, p3 = st.columns(3)
-
-with p1:
-    st.markdown("""
-    #### 🟢 1. Clear Cost Labels First
-    We clearly classify every option:
-    - **Free**: $0 patient charge verified.
-    - **Very Low Cost**: $5–$25 nominal fee.
-    - **Sliding Scale**: Discounts based on income.
-    *Never guessing or surprising you with normal pricing.*
-    """)
-
-with p2:
-    st.markdown("""
-    #### 🎯 2. Transparent Care Access Score
-    We rank options not just by distance, but by:
-    - Cost fit (35%)
-    - Upcoming availability / walk-in (25%)
-    - Service match (15%)
-    - Eligibility & document readiness (10%)
-    - Distance & data freshness (15%)
-    """)
-
-with p3:
-    st.markdown("""
-    #### 🔒 3. Zero Cost & Complete Privacy
-    - **No login or registration required**
-    - **No medical history, SSN, or diagnosis stored**
-    - **Zero cost forever** for patients, navigators, and community organizations.
-    """)
-
 # Footer
 st.markdown("---")
-st.markdown("<div style='text-align: center; font-size: 0.85rem; color: #64748B; padding: 10px 0;'>CareAtZero • Research Triangle Pilot & National Safety Net Navigator • Version 1.0</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 0.85rem; color: #64748B; padding: 10px 0;'><span style='color: #032C5C; font-weight: 700;'>CareAt</span><span style='color: #01848D; font-weight: 700;'>Zero</span> • Research Triangle Pilot & National Safety Net Navigator • Version 1.0</div>", unsafe_allow_html=True)
 
 
 

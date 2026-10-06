@@ -10,12 +10,12 @@ if PROJECT_ROOT not in sys.path:
 from database.db import get_all_saved_care, toggle_saved_care
 from utils.calendar import generate_ics_calendar
 from utils.geo import get_directions_url
-from utils.styles import inject_custom_css, render_header
+from utils.styles import inject_custom_css, render_header, LOGO_PATH
 
 
 st.set_page_config(
     page_title="Saved Care Options | CareAtZero",
-    page_icon="⭐",
+    page_icon=LOGO_PATH,
     layout="wide"
 )
 

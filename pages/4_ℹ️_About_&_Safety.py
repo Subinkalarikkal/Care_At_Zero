@@ -8,12 +8,12 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from database.db import get_connection
-from utils.styles import inject_custom_css, render_header
+from utils.styles import inject_custom_css, render_header, LOGO_PATH
 
 
 st.set_page_config(
     page_title="About & Trust Principles | CareAtZero",
-    page_icon="ℹ️",
+    page_icon=LOGO_PATH,
     layout="wide"
 )
 

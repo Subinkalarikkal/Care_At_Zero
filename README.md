@@ -1,4 +1,4 @@
-# CareAtZero 🩺
+# CareAtZero
 
 > **A free, mobile-first web application that helps uninsured and low-income people find genuinely free or very-low-cost medical, dental, vision, and behavioral healthcare they can realistically access soon.**
 

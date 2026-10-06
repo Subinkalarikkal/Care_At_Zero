@@ -7,7 +7,20 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+import base64
 from database.db import get_all_saved_care
+
+LOGO_PATH = os.path.join(PROJECT_ROOT, "assets", "logo.png")
+
+def get_logo_base64() -> str:
+    """Returns base64 encoded string of the brand logo for inline HTML embedding."""
+    if os.path.exists(LOGO_PATH):
+        try:
+            with open(LOGO_PATH, "rb") as f:
+                return base64.b64encode(f.read()).decode("utf-8")
+        except Exception:
+            return ""
+    return ""
 
 
 def inject_custom_css():
@@ -96,27 +109,27 @@ def inject_custom_css():
 
     /* Main Brand Hero */
     .brand-hero {
-        background: linear-gradient(135deg, #1E40AF 0%, #2563EB 60%, #3B82F6 100%);
+        background: linear-gradient(135deg, #032C5C 0%, #0284C7 45%, #0D9488 100%);
         color: white;
-        padding: 20px 16px;
-        border-radius: 16px;
-        margin-bottom: 12px;
-        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.20);
+        padding: 22px 24px;
+        border-radius: 18px;
+        margin-bottom: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 8px 24px rgba(3, 44, 92, 0.20);
     }
     .brand-title {
-        font-size: 1.65rem;
-        font-weight: 800;
+        font-size: 2.15rem;
+        font-weight: 900;
         margin: 0;
-        letter-spacing: -0.02em;
-        color: #FFFFFF !important;
+        letter-spacing: -0.025em;
+        line-height: 1.15;
     }
     .brand-subtitle {
-        font-size: 0.92rem;
-        opacity: 0.95;
-        margin-top: 5px;
+        font-size: 0.94rem;
+        margin-top: 6px;
         margin-bottom: 0;
-        color: #EFF6FF !important;
-        line-height: 1.35;
+        color: #E0F2FE !important;
+        line-height: 1.4;
     }
 
     /* Badges */
@@ -382,16 +395,27 @@ def inject_custom_css():
 
 
 def render_brand_header():
-    """Renders the top CareAtZero brand hero banner."""
-    st.markdown("""
+    """Renders the top CareAtZero brand hero banner: name first, icon after, matching icon colors & contrast."""
+    logo_b64 = get_logo_base64()
+    if logo_b64:
+        logo_html = f'''<img src="data:image/png;base64,{logo_b64}" style="width: 46px; height: 46px; border-radius: 12px; object-fit: cover; box-shadow: 0 4px 14px rgba(0,0,0,0.25); border: 2px solid rgba(255,255,255,0.85); background: #FFFFFF; padding: 2px; vertical-align: middle; display: inline-block;" alt="CareAtZero Logo" />'''
+    else:
+        logo_html = ""
+
+    st.markdown(f"""
     <div class="brand-hero">
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
             <div>
-                <h1 class="brand-title">CareAtZero 🩺</h1>
-                <p class="brand-subtitle">Find genuinely free, very-low-cost, and sliding-scale healthcare you can realistically access soon.</p>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <h1 class="brand-title" style="margin: 0; line-height: 1.15; display: inline-flex; align-items: center; gap: 12px;">
+                        <span><span style="color: #FFFFFF; font-weight: 900;">CareAt</span><span style="background: linear-gradient(135deg, #A7F3D0 0%, #5EEAD4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; color: #5EEAD4; font-weight: 900;">Zero</span></span>
+                        {logo_html}
+                    </h1>
+                </div>
+                <p class="brand-subtitle" style="margin: 6px 0 0 0;">Find genuinely free, very-low-cost, and sliding-scale healthcare you can realistically access soon.</p>
             </div>
             <div>
-                <span class="trust-pill" style="background: rgba(255,255,255,0.2); color: #fff;">
+                <span class="trust-pill" style="background: rgba(255, 255, 255, 0.18); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.28); font-weight: 600; padding: 6px 14px; font-size: 0.82rem; border-radius: 9999px; backdrop-filter: blur(8px);">
                     ✓ 100% Free & Open Access
                 </span>
             </div>
@@ -425,16 +449,10 @@ def render_header(active_page: str = "home"):
 
 def render_top_nav(active_page: str = "home"):
     """
-    Renders top navigation bar across all pages with active state highlighting
-    and live saved count badge.
+    Renders top navigation bar across all pages with active state highlighting.
+    (Saved care navigation is hidden until user login system is implemented).
     """
-    try:
-        saved_items = get_all_saved_care()
-        saved_count = len(saved_items)
-    except Exception:
-        saved_count = 0
-
-    b1, b2, b3, b4, b5 = st.columns(5)
+    b1, b2, b3, b4 = st.columns(4)
     with b1:
         if st.button("🏠 Home", key="topnav_home", use_container_width=True, type="primary" if active_page == "home" else "secondary"):
             if active_page != "home":
@@ -451,12 +469,6 @@ def render_top_nav(active_page: str = "home"):
                 st.switch_page("pages/2_📋_Care_Details.py")
 
     with b4:
-        saved_lbl = f"⭐ Saved ({saved_count})" if saved_count > 0 else "⭐ Saved"
-        if st.button(saved_lbl, key="topnav_saved", use_container_width=True, type="primary" if active_page == "saved" else "secondary"):
-            if active_page != "saved":
-                st.switch_page("pages/3_⭐_Saved_Care.py")
-
-    with b5:
         if st.button("ℹ️ About", key="topnav_about", use_container_width=True, type="primary" if active_page == "about" else "secondary"):
             if active_page != "about":
                 st.switch_page("pages/4_ℹ️_About_&_Safety.py")
@@ -465,17 +477,12 @@ def render_top_nav(active_page: str = "home"):
 def render_bottom_nav(active_page: str = "home"):
     """
     Renders the fixed PWA bottom navigation bar on mobile viewports
-    with active tab styling and saved count badge.
+    with active tab styling.
+    (Saved care navigation is hidden until user login system is implemented).
     """
-    try:
-        saved_items = get_all_saved_care()
-        saved_count = len(saved_items)
-    except Exception:
-        saved_count = 0
-
     st.markdown("<div style='margin-bottom: 70px;'></div>", unsafe_allow_html=True)
 
-    b1, b2, b3, b4, b5 = st.columns(5)
+    b1, b2, b3, b4 = st.columns(4)
     with b1:
         if st.button("🏠\nHome", key="dock_home", use_container_width=True, type="primary" if active_page == "home" else "secondary"):
             if active_page != "home":
@@ -492,12 +499,6 @@ def render_bottom_nav(active_page: str = "home"):
                 st.switch_page("pages/2_📋_Care_Details.py")
 
     with b4:
-        saved_lbl = f"⭐\nSaved ({saved_count})" if saved_count > 0 else "⭐\nSaved"
-        if st.button(saved_lbl, key="dock_saved", use_container_width=True, type="primary" if active_page == "saved" else "secondary"):
-            if active_page != "saved":
-                st.switch_page("pages/3_⭐_Saved_Care.py")
-
-    with b5:
         if st.button("ℹ️\nAbout", key="dock_about", use_container_width=True, type="primary" if active_page == "about" else "secondary"):
             if active_page != "about":
                 st.switch_page("pages/4_ℹ️_About_&_Safety.py")

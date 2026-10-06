@@ -57,7 +57,6 @@ def tool_test_health(base_url: str = "http://localhost:8501") -> dict:
         "/_stcore/health",
         "/Find_Free_Care",
         "/Care_Details",
-        "/Saved_Care",
         "/About_&_Safety"
     ]
     results = {}
