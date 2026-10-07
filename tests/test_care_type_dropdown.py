@@ -11,17 +11,17 @@ from database.db import get_all_sites, get_all_events
 from mcp_browser_server import tool_simulate_user_journey
 
 CARE_OPTIONS = [
-    "🩺 Medical Care (Primary care & exams)",
-    "🦷 Dental Care (Extractions & cleanings)",
-    "👁️ Vision Care (Free exams & glasses)",
-    "🧠 Behavioral Health (Counseling & crisis care)"
+    "🩺 Medical Care",
+    "🦷 Dental Care",
+    "👁️ Vision Care",
+    "🧠 Behavioral Health"
 ]
 
 CARE_MAPPING = {
-    "🩺 Medical Care (Primary care & exams)": "Medical",
-    "🦷 Dental Care (Extractions & cleanings)": "Dental",
-    "👁️ Vision Care (Free exams & glasses)": "Vision",
-    "🧠 Behavioral Health (Counseling & crisis care)": "Behavioral Health"
+    "🩺 Medical Care": "Medical",
+    "🦷 Dental Care": "Dental",
+    "👁️ Vision Care": "Vision",
+    "🧠 Behavioral Health": "Behavioral Health"
 }
 
 
@@ -35,10 +35,10 @@ def test_care_dropdown_options_integrity():
 
 
 @pytest.mark.parametrize("option_label,expected_service", [
-    ("🩺 Medical Care (Primary care & exams)", "Medical"),
-    ("🦷 Dental Care (Extractions & cleanings)", "Dental"),
-    ("👁️ Vision Care (Free exams & glasses)", "Vision"),
-    ("🧠 Behavioral Health (Counseling & crisis care)", "Behavioral Health"),
+    ("🩺 Medical Care", "Medical"),
+    ("🦷 Dental Care", "Dental"),
+    ("👁️ Vision Care", "Vision"),
+    ("🧠 Behavioral Health", "Behavioral Health"),
 ])
 def test_care_dropdown_options_yield_active_providers(option_label, expected_service):
     """Verify that choosing any dropdown option reliably finds matching safety net providers."""

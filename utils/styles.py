@@ -11,12 +11,24 @@ import base64
 from database.db import get_all_saved_care
 
 LOGO_PATH = os.path.join(PROJECT_ROOT, "assets", "logo.png")
+BANNER_PATH = os.path.join(PROJECT_ROOT, "assets", "brand_banner.png")
 
 def get_logo_base64() -> str:
     """Returns base64 encoded string of the brand logo for inline HTML embedding."""
     if os.path.exists(LOGO_PATH):
         try:
             with open(LOGO_PATH, "rb") as f:
+                return base64.b64encode(f.read()).decode("utf-8")
+        except Exception:
+            return ""
+    return ""
+
+
+def get_banner_base64() -> str:
+    """Returns base64 encoded string of the brand hero banner for inline HTML embedding."""
+    if os.path.exists(BANNER_PATH):
+        try:
+            with open(BANNER_PATH, "rb") as f:
                 return base64.b64encode(f.read()).decode("utf-8")
         except Exception:
             return ""
@@ -107,15 +119,31 @@ def inject_custom_css():
     }
 
 
-    /* Main Brand Hero */
+    /* Main Brand Hero & Banner */
+    .brand-hero-banner {
+        margin-bottom: 14px;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(1, 22, 56, 0.28);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: #011638;
+    }
+    .brand-hero-banner img {
+        width: 100%;
+        max-width: 900px;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+        border-radius: 16px;
+    }
     .brand-hero {
-        background: linear-gradient(135deg, #032C5C 0%, #0284C7 45%, #0D9488 100%);
+        background: linear-gradient(135deg, #011638 0%, #03275A 50%, #011638 100%);
         color: white;
         padding: 22px 24px;
         border-radius: 18px;
         margin-bottom: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        box-shadow: 0 8px 24px rgba(3, 44, 92, 0.20);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 8px 24px rgba(1, 22, 56, 0.28);
     }
     .brand-title {
         font-size: 2.15rem;
@@ -128,7 +156,7 @@ def inject_custom_css():
         font-size: 0.94rem;
         margin-top: 6px;
         margin-bottom: 0;
-        color: #E0F2FE !important;
+        color: #CBD5E1 !important;
         line-height: 1.4;
     }
 
@@ -395,33 +423,30 @@ def inject_custom_css():
 
 
 def render_brand_header():
-    """Renders the top CareAtZero brand hero banner: name first, icon after, matching icon colors & contrast."""
-    logo_b64 = get_logo_base64()
-    if logo_b64:
-        logo_html = f'''<img src="data:image/png;base64,{logo_b64}" style="width: 46px; height: 46px; border-radius: 12px; object-fit: cover; box-shadow: 0 4px 14px rgba(0,0,0,0.25); border: 2px solid rgba(255,255,255,0.85); background: #FFFFFF; padding: 2px; vertical-align: middle; display: inline-block;" alt="CareAtZero Logo" />'''
+    """Renders the top CareAtZero brand hero banner matching the new brand visual identity."""
+    banner_b64 = get_banner_base64()
+    if banner_b64:
+        st.markdown(f"""
+        <div class="brand-hero-banner">
+            <img src="data:image/png;base64,{banner_b64}" alt="CareAtZero - Free care. No insurance. Know where to go." />
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        logo_html = ""
-
-    st.markdown(f"""
-    <div class="brand-hero">
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
-            <div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <h1 class="brand-title" style="margin: 0; line-height: 1.15; display: inline-flex; align-items: center; gap: 12px;">
-                        <span><span style="color: #FFFFFF; font-weight: 900;">CareAt</span><span style="background: linear-gradient(135deg, #A7F3D0 0%, #5EEAD4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; color: #5EEAD4; font-weight: 900;">Zero</span></span>
-                        {logo_html}
+        logo_b64 = get_logo_base64()
+        logo_html = f'''<img src="data:image/png;base64,{logo_b64}" style="width: 48px; height: 48px; border-radius: 12px; object-fit: cover; vertical-align: middle;" alt="CareAtZero Logo" />''' if logo_b64 else ""
+        st.markdown(f"""
+        <div class="brand-hero">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                {logo_html}
+                <div>
+                    <h1 class="brand-title" style="margin: 0; line-height: 1.15;">
+                        <span style="color: #FFFFFF; font-weight: 900;">CareAt</span><span style="color: #00F0D4; font-weight: 900;">Zero</span>
                     </h1>
+                    <p class="brand-subtitle" style="margin: 4px 0 0 0;">Free care. No insurance. Know where to go.</p>
                 </div>
-                <p class="brand-subtitle" style="margin: 6px 0 0 0;">Find genuinely free, very-low-cost, and sliding-scale healthcare you can realistically access soon.</p>
-            </div>
-            <div>
-                <span class="trust-pill" style="background: rgba(255, 255, 255, 0.18); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.28); font-weight: 600; padding: 6px 14px; font-size: 0.82rem; border-radius: 9999px; backdrop-filter: blur(8px);">
-                    ✓ 100% Free & Open Access
-                </span>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 
 def render_emergency_banner():

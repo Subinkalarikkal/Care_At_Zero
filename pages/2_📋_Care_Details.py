@@ -11,7 +11,7 @@ from database.db import get_site_by_id, get_event_by_id, is_care_saved, toggle_s
 from scoring.care_access_score import calculate_care_access_score
 from utils.calendar import generate_ics_calendar
 from utils.export import generate_shareable_referral_text
-from utils.geo import get_directions_url, geocode_location, haversine_distance
+from utils.geo import get_directions_url, geocode_location, haversine_distance, get_user_current_zip
 from utils.styles import inject_custom_css, render_header, LOGO_PATH
 
 
@@ -53,7 +53,7 @@ is_event = record.get("record_type") == "event"
 full_addr = f"{record.get('address')}, {record.get('city')}, {record.get('state')} {record.get('zip_code')}"
 
 # Calculate score breakdown for details
-user_loc = st.session_state.get("search_loc", "27514")
+user_loc = st.session_state.get("search_loc") or get_user_current_zip()
 u_lat, u_lon, loc_label = geocode_location(user_loc)
 dist = haversine_distance(u_lat, u_lon, record.get("latitude"), record.get("longitude"))
 score, breakdown, reasons = calculate_care_access_score(

@@ -1,5 +1,187 @@
 import math
-from typing import Tuple, Optional, Dict
+import urllib.request
+import json
+import os
+from typing import Tuple, Optional, Dict, Any
+
+_CACHED_USER_LOCATION: Optional[Dict[str, Any]] = None
+DEFAULT_FALLBACK_ZIP = "27514"
+
+# Pre-configured US Location simulation IPs
+US_SIMULATION_PRESETS: Dict[str, str] = {
+    "Raleigh, NC": "152.1.0.1",
+    "Chapel Hill, NC": "152.2.0.1",
+    "New York, NY": "128.122.1.1",
+    "Pasadena / Los Angeles, CA": "131.215.1.1",
+    "Mountain View, CA": "66.249.66.1",
+    "Pittsburgh, PA": "128.2.0.1",
+}
+
+
+def set_simulated_location(ip_or_preset: Optional[str] = None, force_zip: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Overrides the current user location with a simulated US location/IP.
+    Clears cache and forces immediate refresh.
+    """
+    global _CACHED_USER_LOCATION
+    _CACHED_USER_LOCATION = None
+
+    sim_ip = US_SIMULATION_PRESETS.get(ip_or_preset, ip_or_preset) if ip_or_preset else None
+
+    try:
+        import streamlit as st
+        if hasattr(st, "session_state"):
+            if sim_ip:
+                st.session_state["simulated_ip"] = sim_ip
+            else:
+                st.session_state.pop("simulated_ip", None)
+
+            if force_zip:
+                st.session_state["simulated_zip"] = force_zip
+            else:
+                st.session_state.pop("simulated_zip", None)
+
+            st.session_state.pop("detected_user_location", None)
+            st.session_state.pop("search_loc", None)
+    except Exception:
+        pass
+
+    return detect_user_location(force_refresh=True, simulated_ip=sim_ip)
+
+
+def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Detects the user's current geographic location and postal/ZIP code via IP geolocation.
+    Supports simulated US IPs, query parameters, environment variables, and fallback.
+    Returns a dictionary with 'zip', 'city', 'region', 'country', 'lat', 'lon', 'source'.
+    """
+    global _CACHED_USER_LOCATION
+
+    # Resolve simulation parameters
+    target_ip = simulated_ip or os.getenv("CARE_SIMULATED_IP")
+    target_zip = os.getenv("CARE_SIMULATED_ZIP")
+
+    try:
+        import streamlit as st
+        if hasattr(st, "query_params"):
+            if "simulated_ip" in st.query_params:
+                target_ip = st.query_params["simulated_ip"]
+            if "simulated_zip" in st.query_params:
+                target_zip = st.query_params["simulated_zip"]
+        if hasattr(st, "session_state"):
+            if not target_ip and "simulated_ip" in st.session_state:
+                target_ip = st.session_state["simulated_ip"]
+            if not target_zip and "simulated_zip" in st.session_state:
+                target_zip = st.session_state["simulated_zip"]
+    except Exception:
+        pass
+
+    if _CACHED_USER_LOCATION is not None and _CACHED_USER_LOCATION.get("source") != "fallback" and not force_refresh and not target_ip and not target_zip:
+        return _CACHED_USER_LOCATION
+
+    try:
+        import streamlit as st
+        if hasattr(st, "session_state") and "detected_user_location" in st.session_state and not force_refresh and not target_ip and not target_zip:
+            sess_loc = st.session_state["detected_user_location"]
+            if sess_loc and sess_loc.get("source") != "fallback":
+                _CACHED_USER_LOCATION = sess_loc
+                return _CACHED_USER_LOCATION
+    except Exception:
+        pass
+
+    # If target_zip is directly specified
+    if target_zip:
+        loc = {
+            "zip": str(target_zip).strip(),
+            "city": "Simulated City",
+            "region": "US",
+            "country": "United States",
+            "lat": 35.7721,
+            "lon": -78.6386,
+            "source": "simulated_zip"
+        }
+        _CACHED_USER_LOCATION = loc
+        try:
+            import streamlit as st
+            if hasattr(st, "session_state"):
+                st.session_state["detected_user_location"] = loc
+        except Exception:
+            pass
+        return loc
+
+    # Determine services endpoints (direct IP query if target_ip is present)
+    if target_ip:
+        services = [
+            (f"https://freeipapi.com/api/json/{target_ip}", "zipCode", "cityName", "regionName", "countryName"),
+            (f"https://ipinfo.io/{target_ip}/json", "postal", "city", "region", "country"),
+        ]
+    else:
+        services = [
+            ("https://ipinfo.io/json", "postal", "city", "region", "country"),
+            ("https://freeipapi.com/api/json", "zipCode", "cityName", "regionName", "countryName"),
+        ]
+
+    detected = None
+    for url, zip_k, city_k, reg_k, cntry_k in services:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "curl/7.88.1 (CareAtZero/1.0)"})
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                z = data.get(zip_k)
+                if z:
+                    z_clean = str(z).strip()
+                    lat = data.get("latitude")
+                    lon = data.get("longitude")
+                    if lat is None and "loc" in data:
+                        parts = data["loc"].split(",")
+                        if len(parts) == 2:
+                            lat = float(parts[0])
+                            lon = float(parts[1])
+
+                    detected = {
+                        "zip": z_clean,
+                        "city": str(data.get(city_k) or "").strip(),
+                        "region": str(data.get(reg_k) or "").strip(),
+                        "country": str(data.get(cntry_k) or "").strip(),
+                        "lat": float(lat) if lat is not None else None,
+                        "lon": float(lon) if lon is not None else None,
+                        "source": url
+                    }
+                    break
+        except Exception:
+            continue
+
+    if detected:
+        _CACHED_USER_LOCATION = detected
+        try:
+            import streamlit as st
+            if hasattr(st, "session_state"):
+                st.session_state["detected_user_location"] = detected
+        except Exception:
+            pass
+        return detected
+
+    # Return fallback without poisoning cache
+    fallback = {
+        "zip": DEFAULT_FALLBACK_ZIP,
+        "city": "Chapel Hill",
+        "region": "NC",
+        "country": "US",
+        "lat": 35.9333,
+        "lon": -79.0333,
+        "source": "fallback"
+    }
+    return fallback
+
+
+def get_user_current_zip() -> str:
+    """
+    Returns the user's current detected ZIP/postal code based on their actual location,
+    falling back to 27514 if location detection is unavailable.
+    """
+    loc = detect_user_location()
+    return loc.get("zip") or DEFAULT_FALLBACK_ZIP
+
 
 # Pre-compiled coordinate reference for NC Research Triangle & regional ZIP codes
 NC_ZIP_COORDINATES: Dict[str, Tuple[float, float, str]] = {
@@ -94,13 +276,23 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 def geocode_location(location_query: str) -> Tuple[float, float, str]:
     """
     Resolves a location string (e.g. '27514', 'Raleigh', 'Durham') to (lat, lon, label).
+    Dynamically checks the user's detected location if the query matches their ZIP.
     """
     cleaned = location_query.strip().upper()
 
-    # Direct 5-digit ZIP match
+    # Direct ZIP match in known NC coordinate table
     if cleaned in NC_ZIP_COORDINATES:
         lat, lon, label = NC_ZIP_COORDINATES[cleaned]
         return lat, lon, label
+
+    # Check if query matches user's current detected location
+    user_loc = detect_user_location()
+    if user_loc and cleaned == str(user_loc.get("zip", "")).upper():
+        if user_loc.get("lat") is not None and user_loc.get("lon") is not None:
+            city_str = user_loc.get("city") or "Current Location"
+            reg_str = user_loc.get("region") or ""
+            label = f"{city_str}, {reg_str} ({cleaned})".strip(" ,")
+            return user_loc["lat"], user_loc["lon"], label
 
     # Fuzzy name match in our database
     for zip_code, (lat, lon, label) in NC_ZIP_COORDINATES.items():
@@ -121,9 +313,9 @@ def geocode_location(location_query: str) -> Tuple[float, float, str]:
     elif "GREENSBORO" in cleaned:
         return NC_ZIP_COORDINATES["27401"]
 
-    # If numeric 5-digit ZIP not in local cache, fallback to Research Triangle center with label
-    if cleaned.isdigit() and len(cleaned) == 5:
-        return DEFAULT_LAT, DEFAULT_LON, f"ZIP {cleaned} (NC Regional Area)"
+    # Numeric ZIP (5 or 6 digit) not in local cache
+    if cleaned.isdigit():
+        return DEFAULT_LAT, DEFAULT_LON, f"ZIP {cleaned} (Area)"
 
     return DEFAULT_LAT, DEFAULT_LON, "Research Triangle, NC"
 

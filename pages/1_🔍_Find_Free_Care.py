@@ -11,7 +11,7 @@ if PROJECT_ROOT not in sys.path:
 
 from database.db import get_all_sites, get_all_events, is_care_saved, toggle_saved_care
 from scoring.care_access_score import calculate_care_access_score
-from utils.geo import geocode_location, haversine_distance, get_directions_url
+from utils.geo import geocode_location, haversine_distance, get_directions_url, get_user_current_zip
 from utils.styles import inject_custom_css, render_header, LOGO_PATH
 
 
@@ -33,8 +33,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Retrieve preset filters from session state if coming from Home page
+user_detected_zip = get_user_current_zip()
 default_service = st.session_state.get("selected_service", "Dental")
-default_loc = st.session_state.get("search_loc", "27514")
+saved_loc = st.session_state.get("search_loc")
+if not saved_loc or (saved_loc == "27514" and user_detected_zip != "27514"):
+    default_loc = user_detected_zip
+    st.session_state["search_loc"] = user_detected_zip
+else:
+    default_loc = saved_loc
 default_timing = st.session_state.get("search_timing", "This Week")
 
 # --- FILTER SECTION ---
@@ -48,7 +54,11 @@ with st.container():
         service_needed = st.selectbox("🩺 **Service Needed** *", service_options, index=s_idx)
 
     with col2:
-        location_input = st.text_input("📍 **Your Location (ZIP or City)** *", value=default_loc, help="Enter a 5-digit ZIP code (e.g. 27514, 27601, 27701) or NC city")
+        location_input = st.text_input(
+            "📍 **Your Location (ZIP or City)** *",
+            value=default_loc,
+            help=f"Defaulted to your detected location ({user_detected_zip}). Enter any ZIP code or city."
+        )
 
     with col3:
         timing_options = ["This Week", "Today", "Flexible (Upcoming)"]

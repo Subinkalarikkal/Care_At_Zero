@@ -1,6 +1,7 @@
 # CareAtZero
 
-> **A free, mobile-first web application that helps uninsured and low-income people find genuinely free or very-low-cost medical, dental, vision, and behavioral healthcare they can realistically access soon.**
+> **Free care. No insurance. Know where to go.**  
+> A free, mobile-first web application that helps uninsured and low-income people find genuinely free or very-low-cost medical, dental, vision, and behavioral healthcare they can realistically access soon.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Streamlit](https://img.shields.io/badge/frontend-Streamlit-FF4B4B.svg)](https://streamlit.io/)
@@ -19,6 +20,7 @@ Combine **permanent free clinics**, **sliding-fee safety-net providers (FQHCs)**
 
 ### 1.3 Key Features
 - **🟢 Free-Care-First Classification:** Immediately distinguishes between `[FREE]`, `[VERY LOW COST]`, and `[SLIDING SCALE]` options.
+- **📍 Automatic Location & ZIP Detection:** Automatically detects the user's current geographic location and pre-fills their local ZIP code without requiring manual input or login.
 - **🎯 100-Point Transparent Care Access Score:** Evaluates realistic accessibility based on cost fit (35%), upcoming availability (25%), service match (15%), eligibility confidence (10%), distance (10%), and data freshness (5%).
 - **🚐 Pop-Up & Mobile Care Discovery:** Surfacing time-sensitive events (RAM Clinics, Mobile Dental Vans, Health Fairs) with automatic expiration filtering.
 - **📄 "What to Bring" Document Checklist:** Interactive pre-visit checklist (ID, proof of address, income stub, or none required).

@@ -13,7 +13,7 @@ if PROJECT_ROOT not in sys.path:
 
 from scoring.care_access_score import calculate_care_access_score
 from database.db import get_all_sites, get_all_events, get_site_by_id, get_event_by_id
-from utils.geo import geocode_location, haversine_distance
+from utils.geo import geocode_location, haversine_distance, get_user_current_zip
 
 
 def log_debug(msg):
@@ -223,7 +223,7 @@ def handle_request(req: dict) -> dict:
             res = tool_simulate_user_journey(
                 persona=args.get("persona", "Uninsured User"),
                 service=args.get("service", "Dental"),
-                location=args.get("location", "27514"),
+                location=args.get("location") or get_user_current_zip(),
                 timing=args.get("timing", "This Week")
             )
         else:
