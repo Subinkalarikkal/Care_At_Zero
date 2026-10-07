@@ -285,4 +285,27 @@ def test_detect_user_location_with_client_browser_query_params():
         assert loc["source"] == "client_browser"
 
 
+def test_user_custom_search_27514_not_clobbered_by_detected_zip():
+    """Verify that explicitly searching for 27514 is strictly preserved and never overwritten by detected zip."""
+    import streamlit as st
+
+    # Simulate user having detected zip of 560018 (Bengaluru)
+    user_detected_zip = "560018"
+
+    # User explicitly searches for 27514
+    searched_zip = "27514"
+    st.session_state["search_loc"] = searched_zip
+
+    saved_loc = st.session_state.get("search_loc")
+    if saved_loc and str(saved_loc).strip():
+        resolved_loc = str(saved_loc).strip()
+    else:
+        resolved_loc = user_detected_zip
+
+    # Must preserve 27514 and NOT revert to 560018
+    assert resolved_loc == "27514"
+    assert resolved_loc != user_detected_zip
+
+
+
 

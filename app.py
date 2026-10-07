@@ -70,12 +70,13 @@ st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
 # Quick Location Search Box
 user_detected_zip = get_user_current_zip()
+
 saved_loc = st.session_state.get("search_loc")
-if not saved_loc or (saved_loc == "27514" and user_detected_zip != "27514"):
+if saved_loc and str(saved_loc).strip():
+    default_loc = str(saved_loc).strip()
+else:
     default_loc = user_detected_zip
     st.session_state["search_loc"] = user_detected_zip
-else:
-    default_loc = saved_loc
 
 loc_info = detect_user_location()
 city_label = safe_city_name(loc_info.get("city", ""))
@@ -95,13 +96,30 @@ with st.form(key="home_quick_search_form", clear_on_submit=False, border=False):
         quick_timing = st.selectbox("⏱️ **When do you need care?**", ["This Week", "Today", "Flexible (Upcoming)"], index=0)
     with search_col3:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        search_submitted = st.form_submit_button("🔍 Find Free Care Now", type="primary", use_container_width=True)
+        search_submitted = st.form_submit_button("🔍 Find Free Care Now", type="primary", use_container_width=True, key="home_find_care_submit_btn")
 
 if search_submitted:
+    target_search = str(quick_loc).strip() if quick_loc and str(quick_loc).strip() else default_loc
     st.session_state["selected_service"] = care_mapping[selected_care_choice]
-    st.session_state["search_loc"] = quick_loc
+    st.session_state["search_loc"] = target_search
     st.session_state["search_timing"] = quick_timing
+    if hasattr(st, "query_params"):
+        st.query_params.pop("client_zip", None)
+        st.query_params.pop("client_city", None)
+        st.query_params.pop("client_lat", None)
+        st.query_params.pop("client_lon", None)
     st.switch_page("pages/1_🔍_Find_Free_Care.py")
+
+loc_col_a, loc_col_b = st.columns([1, 4])
+with loc_col_a:
+    if st.button("📍 Detect My Location", key="btn_redetect_loc", help="Re-detect location using your device"):
+        st.session_state.pop("search_loc", None)
+        st.session_state.pop("detected_user_location", None)
+        if hasattr(st, "query_params"):
+            st.query_params.pop("geo_checked", None)
+            st.query_params.pop("client_zip", None)
+            st.query_params.pop("client_city", None)
+        st.rerun()
 
 if st.query_params.get("test_geo") == "true":
     with st.expander("📍 **Simulate / Test USA Geolocation (Auto-detect Testing)**", expanded=True):

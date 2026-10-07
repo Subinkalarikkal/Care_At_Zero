@@ -95,14 +95,14 @@ def is_datacenter_location(loc: Dict[str, Any]) -> bool:
 
 def inject_client_geo_detector():
     """
-    Injects a client-side detector that fetches the user's location directly from their browser
-    (phone or desktop), guaranteeing accurate location detection across Streamlit Cloud proxies.
+    Injects a client-side detector that fetches the user's real location directly in their browser
+    (phone or desktop), prioritizing HTML5 GPS coordinates, then ipinfo.io, then fallback services.
     """
     try:
         import streamlit as st
         import streamlit.components.v1 as components
 
-        # Skip if already resolved in session_state or query_params
+        # Skip if already resolved in session_state
         if hasattr(st, "session_state"):
             loc = st.session_state.get("detected_user_location")
             if loc and loc.get("source") in ("client_browser", "simulated_zip", "simulated_ip"):
@@ -122,50 +122,11 @@ def inject_client_geo_detector():
                     return;
                 }
 
-                async function resolveLocation() {
-                    var detectedZip = null;
-                    var detectedCity = null;
-
-                    // Primary service: freeipapi (from client browser)
-                    try {
-                        var resp1 = await fetch("https://freeipapi.com/api/json", { cache: "no-store" });
-                        if (resp1.ok) {
-                            var d1 = await resp1.json();
-                            if (d1 && d1.zipCode) {
-                                detectedZip = d1.zipCode;
-                                detectedCity = d1.cityName || "";
-                                if (d1.latitude && d1.longitude) {
-                                    url.searchParams.set("client_lat", d1.latitude);
-                                    url.searchParams.set("client_lon", d1.longitude);
-                                }
-                            }
-                        }
-                    } catch(e) {}
-
-                    // Secondary service: ipapi.co
-                    if (!detectedZip) {
-                        try {
-                            var resp2 = await fetch("https://ipapi.co/json/", { cache: "no-store" });
-                            if (resp2.ok) {
-                                var d2 = await resp2.json();
-                                if (d2 && d2.postal) {
-                                    detectedZip = d2.postal;
-                                    detectedCity = d2.city || "";
-                                    if (d2.latitude && d2.longitude) {
-                                        url.searchParams.set("client_lat", d2.latitude);
-                                        url.searchParams.set("client_lon", d2.longitude);
-                                    }
-                                }
-                            }
-                        } catch(e) {}
-                    }
-
-                    if (detectedZip) {
-                        url.searchParams.set("client_zip", detectedZip);
-                        if (detectedCity) {
-                            url.searchParams.set("client_city", detectedCity);
-                        }
-                    }
+                async function applyGeo(zip, city, lat, lon) {
+                    if (zip) url.searchParams.set("client_zip", zip);
+                    if (city) url.searchParams.set("client_city", city);
+                    if (lat) url.searchParams.set("client_lat", lat);
+                    if (lon) url.searchParams.set("client_lon", lon);
                     url.searchParams.set("geo_checked", "1");
                     try {
                         pLoc.replace(url.href);
@@ -174,7 +135,100 @@ def inject_client_geo_detector():
                     }
                 }
 
-                resolveLocation();
+                async function detectLocation() {
+                    // 1. Try HTML5 Geolocation (GPS hardware on mobile / Wi-Fi positioning on desktop)
+                    if (navigator.geolocation) {
+                        try {
+                            var position = await new Promise(function(resolve, reject) {
+                                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                                    timeout: 3000,
+                                    maximumAge: 120000,
+                                    enableHighAccuracy: true
+                                });
+                            });
+                            if (position && position.coords) {
+                                var lat = position.coords.latitude;
+                                var lon = position.coords.longitude;
+                                // Reverse-geocode via Nominatim
+                                try {
+                                    var nomResp = await fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat=" + lat + "&lon=" + lon, { cache: "no-store" });
+                                    if (nomResp.ok) {
+                                        var nomData = await nomResp.json();
+                                        var addr = nomData.address || {};
+                                        var zip = addr.postcode;
+                                        var city = addr.city || addr.town || addr.village || addr.suburb || addr.county || "";
+                                        if (zip) {
+                                            applyGeo(zip, city, lat, lon);
+                                            return;
+                                        }
+                                    }
+                                } catch(e) {}
+                                // Reverse-geocode via BigDataCloud
+                                try {
+                                    var bdcResp = await fetch("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" + lat + "&longitude=" + lon + "&localityLanguage=en", { cache: "no-store" });
+                                    if (bdcResp.ok) {
+                                        var bdcData = await bdcResp.json();
+                                        var zip = bdcData.postcode;
+                                        var city = bdcData.locality || bdcData.city || "";
+                                        if (zip) {
+                                            applyGeo(zip, city, lat, lon);
+                                            return;
+                                        }
+                                    }
+                                } catch(e) {}
+                            }
+                        } catch(geoErr) {
+                            // GPS denied or timed out, fall through to IP detection
+                        }
+                    }
+
+                    // 2. Primary IP service: ipinfo.io (most accurate for Indian and US networks)
+                    try {
+                        var rInfo = await fetch("https://ipinfo.io/json", { cache: "no-store" });
+                        if (rInfo.ok) {
+                            var dInfo = await rInfo.json();
+                            if (dInfo && dInfo.postal) {
+                                var lat = null, lon = null;
+                                if (dInfo.loc) {
+                                    var parts = dInfo.loc.split(",");
+                                    lat = parts[0]; lon = parts[1];
+                                }
+                                applyGeo(dInfo.postal, dInfo.city || "", lat, lon);
+                                return;
+                            }
+                        }
+                    } catch(e) {}
+
+                    // 3. Secondary IP service: ipapi.co
+                    try {
+                        var rCo = await fetch("https://ipapi.co/json/", { cache: "no-store" });
+                        if (rCo.ok) {
+                            var dCo = await rCo.json();
+                            if (dCo && dCo.postal) {
+                                applyGeo(dCo.postal, dCo.city || "", dCo.latitude, dCo.longitude);
+                                return;
+                            }
+                        }
+                    } catch(e) {}
+
+                    // 4. Tertiary IP service: freeipapi
+                    try {
+                        var rFree = await fetch("https://freeipapi.com/api/json", { cache: "no-store" });
+                        if (rFree.ok) {
+                            var dFree = await rFree.json();
+                            if (dFree && dFree.zipCode) {
+                                applyGeo(dFree.zipCode, dFree.cityName || "", dFree.latitude, dFree.longitude);
+                                return;
+                            }
+                        }
+                    } catch(e) {}
+
+                    // If all failed, mark geo_checked so it does not loop
+                    url.searchParams.set("geo_checked", "1");
+                    try { pLoc.replace(url.href); } catch(e) { window.location.replace(url.href); }
+                }
+
+                detectLocation();
             } catch(err) {
                 console.warn("Client geo skipped:", err);
             }
@@ -257,6 +311,11 @@ def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str
                 if hasattr(st, "session_state"):
                     st.session_state["detected_user_location"] = client_loc
                 _CACHED_USER_LOCATION = client_loc
+                # Remove client_zip from query_params to keep the URL clean and avoid overriding user searches
+                st.query_params.pop("client_zip", None)
+                st.query_params.pop("client_city", None)
+                st.query_params.pop("client_lat", None)
+                st.query_params.pop("client_lon", None)
                 return client_loc
 
             if "simulated_ip" in st.query_params:

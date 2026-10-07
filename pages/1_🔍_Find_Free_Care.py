@@ -38,11 +38,11 @@ st.markdown("""
 user_detected_zip = get_user_current_zip()
 default_service = st.session_state.get("selected_service", "Dental")
 saved_loc = st.session_state.get("search_loc")
-if not saved_loc or (saved_loc == "27514" and user_detected_zip != "27514"):
+if saved_loc and str(saved_loc).strip():
+    default_loc = str(saved_loc).strip()
+else:
     default_loc = user_detected_zip
     st.session_state["search_loc"] = user_detected_zip
-else:
-    default_loc = saved_loc
 default_timing = st.session_state.get("search_timing", "This Week")
 
 # --- FILTER SECTION ---
@@ -59,8 +59,11 @@ with st.container():
         location_input = st.text_input(
             "📍 **Your Location (ZIP or City)** *",
             value=default_loc,
-            help=f"Defaulted to your detected location ({user_detected_zip}). Enter any ZIP code or city."
+            key="find_care_loc_input",
+            help=f"Defaulted to your location ({user_detected_zip}). Enter any ZIP code or city."
         )
+        if location_input and location_input.strip() != st.session_state.get("search_loc"):
+            st.session_state["search_loc"] = location_input.strip()
 
     with col3:
         timing_options = ["This Week", "Today", "Flexible (Upcoming)"]
