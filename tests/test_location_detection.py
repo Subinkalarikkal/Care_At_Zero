@@ -144,13 +144,24 @@ def test_event_proximity_sorting_for_zip_27601():
 
 
 def test_out_of_region_zip_distance_detection():
-    """Verify that an out-of-region postal code like 676306 detects >100 miles distance to NC center."""
+    """Verify that an out-of-region postal code like 676306 detects >1000 miles distance to NC center."""
     from utils.geo import haversine_distance
 
-    user_lat, user_lon, _ = geocode_location("676306")
-    nc_center_lat, nc_center_lon = 35.7721, -78.6386
-    dist_to_nc = haversine_distance(user_lat, user_lon, nc_center_lat, nc_center_lon)
-    assert dist_to_nc > 1000  # Multi-thousand miles away
+    fake_india_loc = {
+        "zip": "676306",
+        "city": "Tirurangadi",
+        "region": "Kerala",
+        "country": "India",
+        "lat": 11.0432,
+        "lon": 75.9234,
+        "source": "mock"
+    }
+    with patch("utils.geo.detect_user_location", return_value=fake_india_loc):
+        user_lat, user_lon, _ = geocode_location("676306")
+        nc_center_lat, nc_center_lon = 35.7721, -78.6386
+        dist_to_nc = haversine_distance(user_lat, user_lon, nc_center_lat, nc_center_lon)
+        assert dist_to_nc > 1000  # Multi-thousand miles away
+
 
 
 def test_strict_zip_clinic_filtering():
@@ -250,5 +261,28 @@ def test_get_client_ip_from_mock_streamlit_context():
     with patch("streamlit.context", MockContext(), create=True):
         client_ip = get_client_ip()
         assert client_ip == "157.48.0.1"
+
+
+def test_safe_city_name_cleans_unicode():
+    """Verify that safe_city_name cleanly strips non-ASCII accents to avoid console/platform crashes."""
+    from utils.geo import safe_city_name
+
+    assert safe_city_name("Tirūrangādi") == "Tirurangadi"
+    assert safe_city_name("Raleigh") == "Raleigh"
+    assert safe_city_name("San José") == "San Jose"
+    assert safe_city_name("") == ""
+
+
+def test_detect_user_location_with_client_browser_query_params():
+    """Verify that client_zip and client_city from browser query params are immediately accepted."""
+    import streamlit as st
+    from utils.geo import detect_user_location
+
+    with patch.object(st, "query_params", {"client_zip": "676306", "client_city": "Tirurangadi"}):
+        loc = detect_user_location(force_refresh=True)
+        assert loc["zip"] == "676306"
+        assert loc["city"] == "Tirurangadi"
+        assert loc["source"] == "client_browser"
+
 
 

@@ -8,6 +8,9 @@ from utils.geo import (
     set_simulated_location,
     US_SIMULATION_PRESETS,
     geocode_location,
-    haversine_distance
+    haversine_distance,
+    inject_client_geo_detector,
+    safe_city_name
 )
 from utils.styles import inject_custom_css, render_header, LOGO_PATH
+

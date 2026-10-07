@@ -14,7 +14,8 @@ from data.seed_data import seed_database
 from utils.styles import inject_custom_css, render_header, LOGO_PATH
 from utils.geo import (
     NC_ZIP_COORDINATES, get_user_current_zip, detect_user_location,
-    set_simulated_location, US_SIMULATION_PRESETS, geocode_location, haversine_distance
+    set_simulated_location, US_SIMULATION_PRESETS, geocode_location, haversine_distance,
+    inject_client_geo_detector, safe_city_name
 )
 
 
@@ -35,6 +36,9 @@ inject_custom_css()
 
 # Render unified top header (CareAtZero banner -> Nav -> Emergency banner)
 render_header("home")
+
+# Inject client-side location detector (fetches real user location directly in browser on mobile and desktop)
+inject_client_geo_detector()
 
 
 # Main Quick Service Launcher & Search Bar
@@ -74,7 +78,7 @@ else:
     default_loc = saved_loc
 
 loc_info = detect_user_location()
-city_label = loc_info.get("city")
+city_label = safe_city_name(loc_info.get("city", ""))
 location_desc = f"{city_label} ({user_detected_zip})" if city_label else user_detected_zip
 
 with st.form(key="home_quick_search_form", clear_on_submit=False, border=False):

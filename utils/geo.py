@@ -18,6 +18,16 @@ US_SIMULATION_PRESETS: Dict[str, str] = {
 }
 
 
+def safe_city_name(city: str) -> str:
+    """Sanitizes city names to prevent unicode encoding errors on various platforms."""
+    if not city:
+        return ""
+    import unicodedata
+    normalized = unicodedata.normalize('NFKD', str(city))
+    cleaned = normalized.encode('ascii', 'ignore').decode('ascii').strip()
+    return cleaned or str(city)
+
+
 def is_valid_public_ip(ip: str) -> bool:
     """Checks whether an IP address is a valid public, routable IP."""
     try:
@@ -83,6 +93,99 @@ def is_datacenter_location(loc: Dict[str, Any]) -> bool:
     return False
 
 
+def inject_client_geo_detector():
+    """
+    Injects a client-side detector that fetches the user's location directly from their browser
+    (phone or desktop), guaranteeing accurate location detection across Streamlit Cloud proxies.
+    """
+    try:
+        import streamlit as st
+        import streamlit.components.v1 as components
+
+        # Skip if already resolved in session_state or query_params
+        if hasattr(st, "session_state"):
+            loc = st.session_state.get("detected_user_location")
+            if loc and loc.get("source") in ("client_browser", "simulated_zip", "simulated_ip"):
+                return
+
+        if hasattr(st, "query_params"):
+            if st.query_params.get("client_zip") or st.query_params.get("geo_checked") or st.query_params.get("simulated_zip"):
+                return
+
+        js_detector = """
+        <script>
+        (function() {
+            try {
+                var pLoc = window.parent.location;
+                var url = new URL(pLoc.href);
+                if (url.searchParams.get("client_zip") || url.searchParams.get("geo_checked") || url.searchParams.get("simulated_zip")) {
+                    return;
+                }
+
+                async function resolveLocation() {
+                    var detectedZip = null;
+                    var detectedCity = null;
+
+                    // Primary service: freeipapi (from client browser)
+                    try {
+                        var resp1 = await fetch("https://freeipapi.com/api/json", { cache: "no-store" });
+                        if (resp1.ok) {
+                            var d1 = await resp1.json();
+                            if (d1 && d1.zipCode) {
+                                detectedZip = d1.zipCode;
+                                detectedCity = d1.cityName || "";
+                                if (d1.latitude && d1.longitude) {
+                                    url.searchParams.set("client_lat", d1.latitude);
+                                    url.searchParams.set("client_lon", d1.longitude);
+                                }
+                            }
+                        }
+                    } catch(e) {}
+
+                    // Secondary service: ipapi.co
+                    if (!detectedZip) {
+                        try {
+                            var resp2 = await fetch("https://ipapi.co/json/", { cache: "no-store" });
+                            if (resp2.ok) {
+                                var d2 = await resp2.json();
+                                if (d2 && d2.postal) {
+                                    detectedZip = d2.postal;
+                                    detectedCity = d2.city || "";
+                                    if (d2.latitude && d2.longitude) {
+                                        url.searchParams.set("client_lat", d2.latitude);
+                                        url.searchParams.set("client_lon", d2.longitude);
+                                    }
+                                }
+                            }
+                        } catch(e) {}
+                    }
+
+                    if (detectedZip) {
+                        url.searchParams.set("client_zip", detectedZip);
+                        if (detectedCity) {
+                            url.searchParams.set("client_city", detectedCity);
+                        }
+                    }
+                    url.searchParams.set("geo_checked", "1");
+                    try {
+                        pLoc.replace(url.href);
+                    } catch(e) {
+                        window.location.replace(url.href);
+                    }
+                }
+
+                resolveLocation();
+            } catch(err) {
+                console.warn("Client geo skipped:", err);
+            }
+        })();
+        </script>
+        """
+        components.html(js_detector, height=0, width=0)
+    except Exception:
+        pass
+
+
 def set_simulated_location(ip_or_preset: Optional[str] = None, force_zip: Optional[str] = None) -> Dict[str, Any]:
     """
     Overrides the current user location with a simulated US location/IP.
@@ -116,8 +219,8 @@ def set_simulated_location(ip_or_preset: Optional[str] = None, force_zip: Option
 
 def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str] = None) -> Dict[str, Any]:
     """
-    Detects the user's current geographic location and postal/ZIP code via IP geolocation.
-    Supports client IP headers on Streamlit Cloud, simulated US IPs, query parameters,
+    Detects the user's current geographic location and postal/ZIP code via client browser or IP geolocation.
+    Supports client browser query params, client IP headers, simulated US IPs,
     and automatic rejection of cloud datacenter locations (e.g. The Dalles, OR 97058).
     Returns a dictionary with 'zip', 'city', 'region', 'country', 'lat', 'lon', 'source'.
     """
@@ -129,11 +232,38 @@ def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str
 
     try:
         import streamlit as st
-        if hasattr(st, "query_params"):
+        # 1. First priority: Check if client browser passed its directly detected ZIP code
+        if hasattr(st, "query_params") and not target_ip and not target_zip:
+            if "client_zip" in st.query_params:
+                c_zip = str(st.query_params["client_zip"]).strip()
+                c_city = safe_city_name(st.query_params.get("client_city", ""))
+                c_lat = None
+                c_lon = None
+                if "client_lat" in st.query_params and "client_lon" in st.query_params:
+                    try:
+                        c_lat = float(st.query_params["client_lat"])
+                        c_lon = float(st.query_params["client_lon"])
+                    except Exception:
+                        pass
+                client_loc = {
+                    "zip": c_zip,
+                    "city": c_city or "Current Location",
+                    "region": "",
+                    "country": "",
+                    "lat": c_lat,
+                    "lon": c_lon,
+                    "source": "client_browser"
+                }
+                if hasattr(st, "session_state"):
+                    st.session_state["detected_user_location"] = client_loc
+                _CACHED_USER_LOCATION = client_loc
+                return client_loc
+
             if "simulated_ip" in st.query_params:
                 target_ip = st.query_params["simulated_ip"]
             if "simulated_zip" in st.query_params:
                 target_zip = st.query_params["simulated_zip"]
+
         if hasattr(st, "session_state"):
             if not target_ip and "simulated_ip" in st.session_state:
                 target_ip = st.session_state["simulated_ip"]
@@ -225,8 +355,8 @@ def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str
 
                     loc_candidate = {
                         "zip": z_clean,
-                        "city": str(data.get(city_k) or "").strip(),
-                        "region": str(data.get(reg_k) or "").strip(),
+                        "city": safe_city_name(str(data.get(city_k) or "")),
+                        "region": safe_city_name(str(data.get(reg_k) or "")),
                         "country": str(data.get(cntry_k) or "").strip(),
                         "lat": float(lat) if lat is not None else None,
                         "lon": float(lon) if lon is not None else None,
