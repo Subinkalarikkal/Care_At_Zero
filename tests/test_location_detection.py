@@ -173,3 +173,82 @@ def test_strict_zip_clinic_filtering():
     assert len(matched_27514) == 1
     assert "Triangle Vision" in matched_27514[0]["title"]
 
+
+def test_is_valid_public_ip():
+    """Verify that is_valid_public_ip correctly filters out private/loopback IPs."""
+    from utils.geo import is_valid_public_ip
+
+    assert is_valid_public_ip("152.1.0.1") is True
+    assert is_valid_public_ip("157.48.0.1") is True
+    assert is_valid_public_ip("127.0.0.1") is False
+    assert is_valid_public_ip("10.0.0.1") is False
+    assert is_valid_public_ip("192.168.1.1") is False
+    assert is_valid_public_ip("172.16.0.1") is False
+    assert is_valid_public_ip("::1") is False
+    assert is_valid_public_ip("invalid-ip") is False
+
+
+def test_is_datacenter_location_rejects_the_dalles_oregon():
+    """Verify that is_datacenter_location flags Streamlit Cloud/Google Cloud datacenter (The Dalles 97058)."""
+    from utils.geo import is_datacenter_location
+
+    dalles_loc = {"city": "The Dalles", "zip": "97058", "region": "Oregon", "country": "US"}
+    assert is_datacenter_location(dalles_loc) is True
+
+    boardman_loc = {"city": "Boardman", "zip": "97818", "region": "Oregon", "country": "US"}
+    assert is_datacenter_location(boardman_loc) is True
+
+    # Real user locations must NOT be flagged as datacenters
+    raleigh_loc = {"city": "Raleigh", "zip": "27601", "region": "North Carolina", "country": "US"}
+    assert is_datacenter_location(raleigh_loc) is False
+
+    ny_loc = {"city": "New York", "zip": "10001", "region": "New York", "country": "US"}
+    assert is_datacenter_location(ny_loc) is False
+
+    india_loc = {"city": "Malappuram", "zip": "676306", "region": "Kerala", "country": "India"}
+    assert is_datacenter_location(india_loc) is False
+
+
+def test_detect_user_location_rejects_the_dalles_datacenter():
+    """Verify that if geolocation service returns The Dalles (97058), detect_user_location rejects it and falls back."""
+    import json
+    from unittest.mock import MagicMock
+    from utils.geo import detect_user_location, DEFAULT_FALLBACK_ZIP
+
+    dalles_response = json.dumps({
+        "postal": "97058",
+        "city": "The Dalles",
+        "region": "Oregon",
+        "country": "US",
+        "latitude": 45.5946,
+        "longitude": -121.1787
+    }).encode("utf-8")
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = dalles_response
+    mock_resp.__enter__.return_value = mock_resp
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        loc = detect_user_location(force_refresh=True)
+        # Must NOT return The Dalles (97058)
+        assert loc["zip"] != "97058"
+        assert loc["city"] != "The Dalles"
+        assert loc["zip"] == DEFAULT_FALLBACK_ZIP
+
+
+def test_get_client_ip_from_mock_streamlit_context():
+    """Verify that get_client_ip properly extracts client IP from Cloudflare or X-Forwarded-For headers."""
+    from utils.geo import get_client_ip
+
+    class MockContext:
+        headers = {
+            "cf-connecting-ip": "157.48.0.1",
+            "x-forwarded-for": "157.48.0.1, 172.68.0.1"
+        }
+        ip_address = "172.68.0.1"
+
+    with patch("streamlit.context", MockContext(), create=True):
+        client_ip = get_client_ip()
+        assert client_ip == "157.48.0.1"
+
+

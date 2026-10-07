@@ -18,6 +18,71 @@ US_SIMULATION_PRESETS: Dict[str, str] = {
 }
 
 
+def is_valid_public_ip(ip: str) -> bool:
+    """Checks whether an IP address is a valid public, routable IP."""
+    try:
+        import ipaddress
+        obj = ipaddress.ip_address(ip.strip())
+        return not (obj.is_private or obj.is_loopback or obj.is_reserved or obj.is_link_local or obj.is_multicast)
+    except Exception:
+        return False
+
+
+def get_client_ip() -> Optional[str]:
+    """
+    Extracts the user's real client IP from Streamlit context headers.
+    Checks Cloudflare (cf-connecting-ip), X-Real-IP, X-Forwarded-For,
+    and Streamlit's context.ip_address.
+    """
+    try:
+        import streamlit as st
+        if hasattr(st, "context"):
+            headers = getattr(st.context, "headers", None)
+            if headers:
+                for h in ["cf-connecting-ip", "x-real-ip", "x-forwarded-for"]:
+                    val = headers.get(h)
+                    if val:
+                        parts = [p.strip() for p in val.split(",") if p.strip()]
+                        for candidate in parts:
+                            if is_valid_public_ip(candidate):
+                                return candidate
+
+            st_ip = getattr(st.context, "ip_address", None)
+            if st_ip and is_valid_public_ip(st_ip):
+                return st_ip.strip()
+    except Exception:
+        pass
+    return None
+
+
+def is_cloud_environment() -> bool:
+    """Detects if running on Streamlit Cloud, container, or cloud host."""
+    if os.path.exists("/mount/src"):
+        return True
+    if os.getenv("STREAMLIT_SHARING_MODE") is not None:
+        return True
+    if os.getenv("STREAMLIT_SERVER_BASE_URL_PATH") is not None:
+        return True
+    return False
+
+
+def is_datacenter_location(loc: Dict[str, Any]) -> bool:
+    """Detects if the detected location belongs to a cloud hosting datacenter instead of a real user."""
+    city = str(loc.get("city", "")).lower()
+    zip_code = str(loc.get("zip", "")).strip()
+
+    # Google Cloud Oregon datacenter (The Dalles, Wasco County, OR 97058)
+    if zip_code == "97058" or "the dalles" in city:
+        return True
+    # AWS / GCP Boardman OR
+    if zip_code == "97818" or "boardman" in city:
+        return True
+    # Ashburn / Sterling VA AWS datacenter clusters
+    if zip_code in ("20147", "20166", "20149") and ("ashburn" in city or "sterling" in city):
+        return True
+    return False
+
+
 def set_simulated_location(ip_or_preset: Optional[str] = None, force_zip: Optional[str] = None) -> Dict[str, Any]:
     """
     Overrides the current user location with a simulated US location/IP.
@@ -52,7 +117,8 @@ def set_simulated_location(ip_or_preset: Optional[str] = None, force_zip: Option
 def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str] = None) -> Dict[str, Any]:
     """
     Detects the user's current geographic location and postal/ZIP code via IP geolocation.
-    Supports simulated US IPs, query parameters, environment variables, and fallback.
+    Supports client IP headers on Streamlit Cloud, simulated US IPs, query parameters,
+    and automatic rejection of cloud datacenter locations (e.g. The Dalles, OR 97058).
     Returns a dictionary with 'zip', 'city', 'region', 'country', 'lat', 'lon', 'source'.
     """
     global _CACHED_USER_LOCATION
@@ -73,21 +139,18 @@ def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str
                 target_ip = st.session_state["simulated_ip"]
             if not target_zip and "simulated_zip" in st.session_state:
                 target_zip = st.session_state["simulated_zip"]
+
+            # Per-session caching check (isolated per user)
+            if not force_refresh and not target_ip and not target_zip:
+                sess_loc = st.session_state.get("detected_user_location")
+                if sess_loc and sess_loc.get("source") != "fallback" and not is_datacenter_location(sess_loc):
+                    return sess_loc
     except Exception:
         pass
 
-    if _CACHED_USER_LOCATION is not None and _CACHED_USER_LOCATION.get("source") != "fallback" and not force_refresh and not target_ip and not target_zip:
+    # Outside Streamlit (e.g. pytest): check global cache if valid
+    if _CACHED_USER_LOCATION is not None and _CACHED_USER_LOCATION.get("source") != "fallback" and not force_refresh and not target_ip and not target_zip and not is_datacenter_location(_CACHED_USER_LOCATION):
         return _CACHED_USER_LOCATION
-
-    try:
-        import streamlit as st
-        if hasattr(st, "session_state") and "detected_user_location" in st.session_state and not force_refresh and not target_ip and not target_zip:
-            sess_loc = st.session_state["detected_user_location"]
-            if sess_loc and sess_loc.get("source") != "fallback":
-                _CACHED_USER_LOCATION = sess_loc
-                return _CACHED_USER_LOCATION
-    except Exception:
-        pass
 
     # If target_zip is directly specified
     if target_zip:
@@ -109,13 +172,35 @@ def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str
             pass
         return loc
 
-    # Determine services endpoints (direct IP query if target_ip is present)
+    # If target_ip not explicitly set, extract real client IP from incoming request
+    if not target_ip:
+        client_ip = get_client_ip()
+        if client_ip:
+            target_ip = client_ip
+
+    # If we are in a cloud environment and target_ip is STILL None:
+    # Do NOT query https://ipinfo.io/json with no IP, because that will resolve
+    # the server container IP in The Dalles, Oregon!
+    if is_cloud_environment() and not target_ip:
+        fallback = {
+            "zip": DEFAULT_FALLBACK_ZIP,
+            "city": "Chapel Hill",
+            "region": "NC",
+            "country": "US",
+            "lat": 35.9333,
+            "lon": -79.0333,
+            "source": "fallback"
+        }
+        return fallback
+
+    # Determine services endpoints
     if target_ip:
         services = [
             (f"https://freeipapi.com/api/json/{target_ip}", "zipCode", "cityName", "regionName", "countryName"),
             (f"https://ipinfo.io/{target_ip}/json", "postal", "city", "region", "country"),
         ]
     else:
+        # Local development on developer's machine: query own IP
         services = [
             ("https://ipinfo.io/json", "postal", "city", "region", "country"),
             ("https://freeipapi.com/api/json", "zipCode", "cityName", "regionName", "countryName"),
@@ -138,7 +223,7 @@ def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str
                             lat = float(parts[0])
                             lon = float(parts[1])
 
-                    detected = {
+                    loc_candidate = {
                         "zip": z_clean,
                         "city": str(data.get(city_k) or "").strip(),
                         "region": str(data.get(reg_k) or "").strip(),
@@ -147,7 +232,11 @@ def detect_user_location(force_refresh: bool = False, simulated_ip: Optional[str
                         "lon": float(lon) if lon is not None else None,
                         "source": url
                     }
-                    break
+
+                    # Verify candidate is NOT a cloud datacenter
+                    if not is_datacenter_location(loc_candidate):
+                        detected = loc_candidate
+                        break
         except Exception:
             continue
 
