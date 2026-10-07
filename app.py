@@ -2,9 +2,11 @@ import streamlit as st
 import os
 import sys
 
-# Ensure project root in sys.path
+# Ensure project root is strictly first in sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-if PROJECT_ROOT not in sys.path:
+if not sys.path or sys.path[0] != PROJECT_ROOT:
+    if PROJECT_ROOT in sys.path:
+        sys.path.remove(PROJECT_ROOT)
     sys.path.insert(0, PROJECT_ROOT)
 
 from database.db import get_all_events, init_db, DB_PATH
