@@ -159,7 +159,7 @@ with res_col2:
 # Map View Rendering
 if view_mode == "🗺️ Map View":
     st.markdown("#### 🗺️ Interactive Clinic & Pop-Up Event Map")
-    m = folium.Map(location=[user_lat, user_lon], zoom_start=10, tiles="CartoDB positron")
+    m = folium.Map(location=[user_lat, user_lon], zoom_start=10, tiles="OpenStreetMap")
 
     # User search location marker
     folium.Marker(
